@@ -56,8 +56,13 @@ public:
 	UMaterialInterface* m_FloorMaterial;
 
 	UPROPERTY(EditAnywhere, Category= "HallMaterials")
-	UMaterialInterface* m_HallwayMaterial; 
+	UMaterialInterface* m_HallwayMaterial;
 
+	UPROPERTY(EditAnywhere, Category= "RoomParams")
+	UStaticMesh* m_WallMesh;
+
+	UPROPERTY(EditAnywhere, Category= "RoomParams")
+	UStaticMesh* m_DoorMesh;
 private:
 	enum class EDirection
 	{
@@ -69,7 +74,8 @@ private:
 
 	FCoordinates m_PlayAreaCoords;
 	TArray<ARoom*> m_Rooms;
-	TArray<UProceduralMeshComponent*> m_HallwayMeshes;
+	TArray<UProceduralMeshComponent*> m_HallMeshes;
+	
 	
 
 	void DefinePlayArea();
@@ -81,6 +87,7 @@ private:
 	TArray<Vertex> GetRoomVertices();
 	TArray<Vertex> GetRoomCenter();
 	void DressRooms();
+	void ApplyHallVisuals(const TArray<TArray<IntVector>>&, const TArray<TArray<GridNode>>&);
 
 	TArray<Edge> GetMST(const TArray<Triangle>&);
 	int32 SelectMinVertex(const std::vector<int>&, const std::vector<bool>&);

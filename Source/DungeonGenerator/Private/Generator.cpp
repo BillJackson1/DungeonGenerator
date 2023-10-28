@@ -4,6 +4,7 @@
 #include "Generator.h"
 #include <vector>
 #include "Kismet/GameplayStatics.h"
+#include "Engine/World.h"
 
 // Sets default values
 AGenerator::AGenerator()
@@ -48,7 +49,12 @@ void AGenerator::BeginPlay()
 	TArray<TArray<IntVector>> hallways = GenerateHallways(grid, MST);
 
 	DressRooms();
-	DressHallways(hallways, grid);
+	ApplyHallVisuals(hallways, grid);
+
+	int32 startRoomIndex = FMath::RandRange(0, m_Rooms.Num() - 1);
+	FVector startPos = m_Rooms[startRoomIndex]->GetCenter();
+	startPos.Z += 200.f;
+	UGameplayStatics::GetPlayerPawn(GetWorld(), 0)->SetActorLocation(startPos);
 }
 
 // Called every frame
@@ -62,8 +68,10 @@ void AGenerator::DefinePlayArea()
 {
 	m_PlayAreaCoords.MinX = 0;
 	m_PlayAreaCoords.MinY = 0;
-	m_PlayAreaCoords.MaxX = m_PlayAreaSizeX;
-	m_PlayAreaCoords.MaxY = m_PlayAreaSizeY;
+	m_PlayAreaCoords.MaxX = m_PlayAreaSizeX * m_GridCellSize;
+	m_PlayAreaCoords.MaxY = m_PlayAreaSizeY * m_GridCellSize;
+
+	UE_LOG(LogTemp, Warning, TEXT("Size x: %d  Size Y: %d"), m_PlayAreaSizeX * m_GridCellSize, m_PlayAreaSizeY * m_GridCellSize);
 
 	FVector center = FVector(m_PlayAreaSizeX / 2, m_PlayAreaSizeY / 2, 0.f);
 
@@ -134,11 +142,11 @@ FVector AGenerator::SelectRoomLocation(const IntVector roomExtent, FCoordinates&
 
 	if (minX < 0)
 	{
-		minX += roomExtent.X * 2;
+		minX += abs(minX);
 	}
 	if (minY < 0)
 	{
-		minY += roomExtent.Y * 2;
+		minY += abs(minY);
 	}
 
 	coords.MinX = minX;
@@ -842,7 +850,7 @@ void AGenerator::DressHallways(const TArray<TArray<IntVector>>& hallways, const 
 
 		
 		mesh->RegisterComponent();
-		m_HallwayMeshes.Add(mesh);
+		//m_HallwayMeshes.Add(mesh);
 	}
 
 
@@ -878,7 +886,7 @@ bool AGenerator::CheckOverlap(const TArray<ARoom*>& rooms, const FCoordinates& r
 	{
 		FCoordinates A = rooms[i]->GetCoordinates();
 
-		if (A.MinX - m_MinSpacing < B.MaxX && A.MaxX + m_MinSpacing > B.MinX && A.MinY - m_MinSpacing < B.MaxY && A.MaxY + m_MinSpacing > B.MinY)
+		if (A.MinX - m_MinSpacing * m_GridCellSize < B.MaxX && A.MaxX + m_MinSpacing * m_GridCellSize > B.MinX && A.MinY - m_MinSpacing * m_GridCellSize < B.MaxY && A.MaxY + m_MinSpacing * m_GridCellSize > B.MinY)
 		{
 			return true;
 		}
@@ -993,6 +1001,160 @@ void AGenerator::DressRooms()
 	for (ARoom* room : m_Rooms)
 	{
 		room->SetFloorMaterial(m_FloorMaterial);
+		room->SetWalls(*m_WallMesh, m_GridCellSize);
+	}
+
+
+}
+
+void AGenerator::ApplyHallVisuals(const TArray<TArray<IntVector>>& halls, const TArray<TArray<GridNode>>& grid)
+{
+	
+	for (int i = 0; i < halls.Num(); i++)
+	{
+		int32 sectionCounter = 0;
+		for (int j = 0; j < halls[i].Num(); j++)
+		{
+			UProceduralMeshComponent* mesh = Cast<UProceduralMeshComponent>(AddComponentByClass(UProceduralMeshComponent::StaticClass(), false, FTransform(), false));
+
+			GridNode currentNode = grid[halls[i][j].X][halls[i][j].Y];
+
+			int32 minX = currentNode.nodeCoords.MinX;
+			int32 minY = currentNode.nodeCoords.MinY;
+			int32 maxX = currentNode.nodeCoords.MaxX;
+			int32 maxY = currentNode.nodeCoords.MaxY;
+
+			TArray<FVector> vertices{ FVector(minX, minY, 0.f),
+									  FVector(maxX, minY, 0.f),
+									  FVector(maxX, maxY, 0.f),
+									  FVector(minX, maxY, 0.f) };
+
+			TArray<int32> triangles{ 0, 2, 1,
+									0, 3, 2 };
+
+			TArray<FVector> normals{ FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f) };
+			TArray<FVector2D> UV0{ FVector2D(0, 0), FVector2D(0, 1), FVector2D(1, 1), FVector2D(1, 0) };
+			TArray<FProcMeshTangent> tangents{ FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f) };
+
+			mesh->CreateMeshSection(sectionCounter, vertices, triangles, normals, UV0, TArray<FColor>(), tangents, true);
+			mesh->SetMaterial(sectionCounter, m_HallwayMaterial);
+
+			if (j == 0 || j == halls[i].Num() - 1)
+			{
+				
+				if (j == 0)
+				{
+					//Find direction opposite to next hallway tile from start tile
+					IntVector current{ halls[i][j]};
+					IntVector next{halls[i][j+1]};
+
+					UE_LOG(LogTemp, Warning, TEXT("Current X: %d Y: %d   Next X: %d Y:%d"), current.X, current.Y, next.X, next.Y);
+
+					FVector dir;
+
+					//Needed cause door asset doesn't have the same pivot point as the walls(Should learn to change pivot points maybe??)
+					FVector shiftDir;
+
+					if (next.X > current.X)
+					{
+						dir = FVector::BackwardVector;
+						shiftDir = FVector::LeftVector;
+					}
+					else if (next.X < current.X)
+					{
+						dir = FVector::ForwardVector;
+						shiftDir = FVector::RightVector;
+					}
+					else if (next.Y > current.Y)
+					{
+						dir = FVector::LeftVector;
+						shiftDir = FVector::ForwardVector;
+					}
+					else if (next.Y < current.Y)
+					{
+						dir = FVector::RightVector;
+						shiftDir = FVector::BackwardVector;
+					}
+
+					shiftDir *= m_GridCellSize / 2;
+
+					FVector start(currentNode.nodeCoords.MinX + m_GridCellSize / 2.f, currentNode.nodeCoords.MinY + m_GridCellSize / 2.f, 0.f);
+					FVector end = start + dir * m_GridCellSize;
+					FHitResult hit;
+
+					if (GetWorld()->LineTraceSingleByChannel(hit, start, end, ECollisionChannel::ECC_Visibility, FCollisionQueryParams::DefaultQueryParam, FCollisionResponseParams::DefaultResponseParam))
+					{
+						if (Cast<ARoom>(hit.GetActor()))
+						{
+							UStaticMeshComponent* sm = Cast<UStaticMeshComponent>(hit.Component);
+
+							if (sm->GetStaticMesh() != m_DoorMesh)
+							{
+								sm->SetStaticMesh(m_DoorMesh);
+								sm->SetRelativeLocation(sm->GetRelativeLocation() + shiftDir);
+							}
+						}
+					}
+				}
+				else
+				{
+					//Find direction opposite to next hallway tile from end tile
+					IntVector current{halls[i][j]};
+					IntVector previous{halls[i][j-1]};
+					FVector dir;
+
+					//Needed cause door asset doesn't have the same pivot point as the walls
+					FVector shiftDir;
+
+					if (previous.X > current.X)
+					{
+						dir = FVector::BackwardVector;
+						shiftDir = FVector::LeftVector;
+					}
+					else if (previous.X < current.X)
+					{
+						dir = FVector::ForwardVector;
+						shiftDir = FVector::RightVector;
+					}
+					else if (previous.Y > current.Y)
+					{
+						dir = FVector::LeftVector;
+						shiftDir = FVector::ForwardVector;
+					}
+					else if (previous.Y < current.Y)
+					{
+						dir = FVector::RightVector;
+						shiftDir = FVector::BackwardVector;
+					}
+
+					shiftDir *= m_GridCellSize / 2;
+
+					FVector start(currentNode.nodeCoords.MinX + m_GridCellSize / 2.f, currentNode.nodeCoords.MinY + m_GridCellSize / 2.f, 0.f);
+					FVector end = start + dir * m_GridCellSize;
+
+					FHitResult hit;
+
+					if (GetWorld()->LineTraceSingleByChannel(hit, start, end, ECollisionChannel::ECC_Visibility, FCollisionQueryParams::DefaultQueryParam, FCollisionResponseParams::DefaultResponseParam))
+					{
+						if (Cast<ARoom>(hit.GetActor()) && Cast<UStaticMeshComponent>(hit.Component)->GetStaticMesh() != m_DoorMesh)
+						{
+							UStaticMeshComponent* sm = Cast<UStaticMeshComponent>(hit.Component);
+
+							if (sm->GetStaticMesh() != m_DoorMesh)
+							{
+								sm->SetStaticMesh(m_DoorMesh);
+								sm->SetRelativeLocation(sm->GetRelativeLocation() + shiftDir);
+							}
+						}
+					}
+				}
+
+
+
+			}
+
+			sectionCounter++;
+		}
 	}
 }
 
@@ -1000,8 +1162,14 @@ void AGenerator::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEv
 {
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 
-	m_RoomSizeX = FMath::Clamp(m_RoomSizeX, 0, m_PlayAreaSizeX / (m_GridCellSize < 1 ? 1 : m_GridCellSize));
-	m_RoomSizeY = FMath::Clamp(m_RoomSizeY, 0, m_PlayAreaSizeY / (m_GridCellSize < 1 ? 1 : m_GridCellSize));
+	if (PropertyChangedEvent.GetMemberPropertyName() == "m_RoomSizeX")
+	{
+		m_RoomSizeX = FMath::Clamp(m_RoomSizeX, 0, m_PlayAreaSizeX < 1 ? 1 : m_PlayAreaSizeX);
+	}
+	else if (PropertyChangedEvent.GetMemberPropertyName() == "m_RoomSizeY")
+	{
+		m_RoomSizeY = FMath::Clamp(m_RoomSizeY, 0, m_PlayAreaSizeY < 1 ? 1 : m_PlayAreaSizeY);
+	}
 }
 
 
