@@ -87,7 +87,9 @@ private:
 	TArray<Vertex> GetRoomVertices();
 	TArray<Vertex> GetRoomCenter();
 	void DressRooms();
-	void ApplyHallVisuals(const TArray<TArray<IntVector>>&, const TArray<TArray<GridNode>>&);
+	void MakeDoors(const TArray<TArray<IntVector>>&, const TArray<TArray<GridNode>>&);
+	void MergeHallways(TArray<TArray<IntVector>>&);
+	void ApplyHallVisuals(TArray<TArray<IntVector>>&, const TArray<TArray<GridNode>>&);
 
 	TArray<Edge> GetMST(const TArray<Triangle>&);
 	int32 SelectMinVertex(const std::vector<int>&, const std::vector<bool>&);

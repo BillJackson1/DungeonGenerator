@@ -3,6 +3,7 @@
 
 #include "Generator.h"
 #include <vector>
+#include "DrawDebugHelpers.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 
@@ -1007,155 +1008,196 @@ void AGenerator::DressRooms()
 
 }
 
-void AGenerator::ApplyHallVisuals(const TArray<TArray<IntVector>>& halls, const TArray<TArray<GridNode>>& grid)
+void AGenerator::MakeDoors(const TArray<TArray<IntVector>>& halls, const TArray<TArray<GridNode>>& grid)
 {
+	//Replacing walls with doors
+	for (int i = 0; i < halls.Num(); i++)
+	{
+		GridNode currentNode = grid[halls[i][0].X][halls[i][0].Y];
+		//Find direction opposite to next hallway tile from start tile
+		IntVector current{ halls[i][0] };
+		IntVector next{ halls[i][1] };
+
+		UE_LOG(LogTemp, Warning, TEXT("Current X: %d Y: %d   Next X: %d Y:%d"), current.X, current.Y, next.X, next.Y);
+
+		FVector dir;
+
+		//Needed cause door asset doesn't have the same pivot point as the walls(Should learn to change pivot points maybe??)
+		FVector shiftDir;
+
+		if (next.X > current.X)
+		{
+			dir = FVector::BackwardVector;
+			shiftDir = FVector::LeftVector;
+		}
+		else if (next.X < current.X)
+		{
+			dir = FVector::ForwardVector;
+			shiftDir = FVector::RightVector;
+		}
+		else if (next.Y > current.Y)
+		{
+			dir = FVector::LeftVector;
+			shiftDir = FVector::ForwardVector;
+		}
+		else if (next.Y < current.Y)
+		{
+			dir = FVector::RightVector;
+			shiftDir = FVector::BackwardVector;
+		}
+
+		shiftDir *= m_GridCellSize / 2;
+
+		FVector start(currentNode.nodeCoords.MinX + m_GridCellSize / 2.f, currentNode.nodeCoords.MinY + m_GridCellSize / 2.f, 0.f);
+		FVector end = start + dir * m_GridCellSize;
+		FHitResult hit;
+		
+		DrawDebugLine(GetWorld(), start, end, FColor::Blue, true, -1.f, -2, 25.f);
+		DrawDebugPoint(GetWorld(), start, 25.f, FColor::Yellow, true, -1.f, -3);
+
+		if (GetWorld()->LineTraceSingleByChannel(hit, start, end, ECollisionChannel::ECC_Visibility, FCollisionQueryParams::DefaultQueryParam, FCollisionResponseParams::DefaultResponseParam))
+		{
+			if (Cast<ARoom>(hit.GetActor()))
+			{
+				UStaticMeshComponent* sm = Cast<UStaticMeshComponent>(hit.Component);
+
+				if (sm->GetStaticMesh() != m_DoorMesh)
+				{
+					sm->SetStaticMesh(m_DoorMesh);
+					sm->SetRelativeLocation(sm->GetRelativeLocation() + shiftDir);
+				}
+			}
+		}
+		
+
+		//Find direction opposite to next hallway tile from end tile
+		currentNode = grid[halls[i].Last().X][halls[i].Last().Y];
+		current = { halls[i].Last()};
+		IntVector previous{ halls[i].Last(1) };
+
+		if (previous.X > current.X)
+		{
+			dir = FVector::BackwardVector;
+			shiftDir = FVector::LeftVector;
+		}
+		else if (previous.X < current.X)
+		{
+			dir = FVector::ForwardVector;
+			shiftDir = FVector::RightVector;
+		}
+		else if (previous.Y > current.Y)
+		{
+			dir = FVector::LeftVector;
+			shiftDir = FVector::ForwardVector;
+		}
+		else if (previous.Y < current.Y)
+		{
+			dir = FVector::RightVector;
+			shiftDir = FVector::BackwardVector;
+		}
+
+		start = FVector(currentNode.nodeCoords.MinX + m_GridCellSize / 2.f, currentNode.nodeCoords.MinY + m_GridCellSize / 2.f, 0.f);
+		end = start + dir * m_GridCellSize;
+
+		DrawDebugLine(GetWorld(), start, end, FColor::Blue, true, -1.f, -2, 25.f);
+		DrawDebugPoint(GetWorld(), start, 25.f, FColor::Red, true, -1.f, -3);
+
+		shiftDir *= m_GridCellSize / 2;
+
+		if (GetWorld()->LineTraceSingleByChannel(hit, start, end, ECollisionChannel::ECC_Visibility, FCollisionQueryParams::DefaultQueryParam, FCollisionResponseParams::DefaultResponseParam))
+		{
+			if (Cast<ARoom>(hit.GetActor()) && Cast<UStaticMeshComponent>(hit.Component)->GetStaticMesh() != m_DoorMesh)
+			{
+				UStaticMeshComponent* sm = Cast<UStaticMeshComponent>(hit.Component);
+
+				if (sm->GetStaticMesh() != m_DoorMesh)
+				{
+					sm->SetStaticMesh(m_DoorMesh);
+					sm->SetRelativeLocation(sm->GetRelativeLocation() + shiftDir);
+				}
+			}
+		}
+	}
+	
+}
+
+void AGenerator::MergeHallways( TArray<TArray<IntVector>>& halls)
+{
+	TArray<TArray<IntVector>> mergedHallways{};
 	
 	for (int i = 0; i < halls.Num(); i++)
 	{
-		int32 sectionCounter = 0;
+		TArray<IntVector> mergedHall{};
 		for (int j = 0; j < halls[i].Num(); j++)
 		{
-			UProceduralMeshComponent* mesh = Cast<UProceduralMeshComponent>(AddComponentByClass(UProceduralMeshComponent::StaticClass(), false, FTransform(), false));
-
-			GridNode currentNode = grid[halls[i][j].X][halls[i][j].Y];
-
-			int32 minX = currentNode.nodeCoords.MinX;
-			int32 minY = currentNode.nodeCoords.MinY;
-			int32 maxX = currentNode.nodeCoords.MaxX;
-			int32 maxY = currentNode.nodeCoords.MaxY;
-
-			TArray<FVector> vertices{ FVector(minX, minY, 0.f),
-									  FVector(maxX, minY, 0.f),
-									  FVector(maxX, maxY, 0.f),
-									  FVector(minX, maxY, 0.f) };
-
-			TArray<int32> triangles{ 0, 2, 1,
-									0, 3, 2 };
-
-			TArray<FVector> normals{ FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f) };
-			TArray<FVector2D> UV0{ FVector2D(0, 0), FVector2D(0, 1), FVector2D(1, 1), FVector2D(1, 0) };
-			TArray<FProcMeshTangent> tangents{ FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f) };
-
-			mesh->CreateMeshSection(sectionCounter, vertices, triangles, normals, UV0, TArray<FColor>(), tangents, true);
-			mesh->SetMaterial(sectionCounter, m_HallwayMaterial);
-
-			if (j == 0 || j == halls[i].Num() - 1)
+			for (int k = i + 1; k < halls.Num(); k++)
 			{
-				
-				if (j == 0)
+				if (k >= halls.Num())
 				{
-					//Find direction opposite to next hallway tile from start tile
-					IntVector current{ halls[i][j]};
-					IntVector next{halls[i][j+1]};
-
-					UE_LOG(LogTemp, Warning, TEXT("Current X: %d Y: %d   Next X: %d Y:%d"), current.X, current.Y, next.X, next.Y);
-
-					FVector dir;
-
-					//Needed cause door asset doesn't have the same pivot point as the walls(Should learn to change pivot points maybe??)
-					FVector shiftDir;
-
-					if (next.X > current.X)
-					{
-						dir = FVector::BackwardVector;
-						shiftDir = FVector::LeftVector;
-					}
-					else if (next.X < current.X)
-					{
-						dir = FVector::ForwardVector;
-						shiftDir = FVector::RightVector;
-					}
-					else if (next.Y > current.Y)
-					{
-						dir = FVector::LeftVector;
-						shiftDir = FVector::ForwardVector;
-					}
-					else if (next.Y < current.Y)
-					{
-						dir = FVector::RightVector;
-						shiftDir = FVector::BackwardVector;
-					}
-
-					shiftDir *= m_GridCellSize / 2;
-
-					FVector start(currentNode.nodeCoords.MinX + m_GridCellSize / 2.f, currentNode.nodeCoords.MinY + m_GridCellSize / 2.f, 0.f);
-					FVector end = start + dir * m_GridCellSize;
-					FHitResult hit;
-
-					if (GetWorld()->LineTraceSingleByChannel(hit, start, end, ECollisionChannel::ECC_Visibility, FCollisionQueryParams::DefaultQueryParam, FCollisionResponseParams::DefaultResponseParam))
-					{
-						if (Cast<ARoom>(hit.GetActor()))
-						{
-							UStaticMeshComponent* sm = Cast<UStaticMeshComponent>(hit.Component);
-
-							if (sm->GetStaticMesh() != m_DoorMesh)
-							{
-								sm->SetStaticMesh(m_DoorMesh);
-								sm->SetRelativeLocation(sm->GetRelativeLocation() + shiftDir);
-							}
-						}
-					}
+					break;
 				}
-				else
+				for (int h = 0; h < halls[k].Num(); k++)
 				{
-					//Find direction opposite to next hallway tile from end tile
-					IntVector current{halls[i][j]};
-					IntVector previous{halls[i][j-1]};
-					FVector dir;
-
-					//Needed cause door asset doesn't have the same pivot point as the walls
-					FVector shiftDir;
-
-					if (previous.X > current.X)
+					if (halls[i][j] == halls[k][h])
 					{
-						dir = FVector::BackwardVector;
-						shiftDir = FVector::LeftVector;
-					}
-					else if (previous.X < current.X)
-					{
-						dir = FVector::ForwardVector;
-						shiftDir = FVector::RightVector;
-					}
-					else if (previous.Y > current.Y)
-					{
-						dir = FVector::LeftVector;
-						shiftDir = FVector::ForwardVector;
-					}
-					else if (previous.Y < current.Y)
-					{
-						dir = FVector::RightVector;
-						shiftDir = FVector::BackwardVector;
-					}
-
-					shiftDir *= m_GridCellSize / 2;
-
-					FVector start(currentNode.nodeCoords.MinX + m_GridCellSize / 2.f, currentNode.nodeCoords.MinY + m_GridCellSize / 2.f, 0.f);
-					FVector end = start + dir * m_GridCellSize;
-
-					FHitResult hit;
-
-					if (GetWorld()->LineTraceSingleByChannel(hit, start, end, ECollisionChannel::ECC_Visibility, FCollisionQueryParams::DefaultQueryParam, FCollisionResponseParams::DefaultResponseParam))
-					{
-						if (Cast<ARoom>(hit.GetActor()) && Cast<UStaticMeshComponent>(hit.Component)->GetStaticMesh() != m_DoorMesh)
+						mergedHall.Append(halls[i]);
+						for (IntVector tile : halls[k])
 						{
-							UStaticMeshComponent* sm = Cast<UStaticMeshComponent>(hit.Component);
-
-							if (sm->GetStaticMesh() != m_DoorMesh)
-							{
-								sm->SetStaticMesh(m_DoorMesh);
-								sm->SetRelativeLocation(sm->GetRelativeLocation() + shiftDir);
-							}
+							mergedHall.AddUnique(tile);
 						}
-					}
+
+						mergedHallways.Add(mergedHall);
+
+						break;
+					}			
 				}
-
-
-
 			}
-
-			sectionCounter++;
 		}
 	}
+
+	halls = mergedHallways;
+}
+
+void AGenerator::ApplyHallVisuals( TArray<TArray<IntVector>>& halls, const TArray<TArray<GridNode>>& grid)
+{
+	//We need to place doors where halls meet rooms
+	MakeDoors(halls, grid);
+
+	//We need to merge halls that are interconnected to avoid multiple rendering, and it will help with wall placement at junctions.
+	MergeHallways(halls);
+
+	//for (int i = 0; i < halls.Num(); i++)
+	//{
+	//	int32 sectionCounter = 0;
+	//	for (int j = 0; j < halls[i].Num(); j++)
+	//	{
+	//		UProceduralMeshComponent* mesh = Cast<UProceduralMeshComponent>(AddComponentByClass(UProceduralMeshComponent::StaticClass(), false, FTransform(), false));
+
+	//		GridNode currentNode = grid[halls[i][j].X][halls[i][j].Y];
+
+	//		int32 minX = currentNode.nodeCoords.MinX;
+	//		int32 minY = currentNode.nodeCoords.MinY;
+	//		int32 maxX = currentNode.nodeCoords.MaxX;
+	//		int32 maxY = currentNode.nodeCoords.MaxY;
+
+	//		TArray<FVector> vertices{ FVector(minX, minY, 0.f),
+	//								  FVector(maxX, minY, 0.f),
+	//								  FVector(maxX, maxY, 0.f),
+	//								  FVector(minX, maxY, 0.f) };
+
+	//		TArray<int32> triangles{ 0, 2, 1,
+	//								0, 3, 2 };
+
+	//		TArray<FVector> normals{ FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f) };
+	//		TArray<FVector2D> UV0{ FVector2D(0, 0), FVector2D(0, 1), FVector2D(1, 1), FVector2D(1, 0) };
+	//		TArray<FProcMeshTangent> tangents{ FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f) };
+
+	//		mesh->CreateMeshSection(sectionCounter, vertices, triangles, normals, UV0, TArray<FColor>(), tangents, true);
+	//		mesh->SetMaterial(sectionCounter, m_HallwayMaterial);
+
+	//		sectionCounter++;
+	//	}
+	//}
 }
 
 void AGenerator::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
