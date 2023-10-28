@@ -1127,16 +1127,13 @@ void AGenerator::MergeHallways( TArray<TArray<IntVector>>& halls)
 	
 	for (int i = 0; i < halls.Num(); i++)
 	{
+		bool isMerged = false;
 		TArray<IntVector> mergedHall{};
 		for (int j = 0; j < halls[i].Num(); j++)
 		{
 			for (int k = i + 1; k < halls.Num(); k++)
 			{
-				if (k >= halls.Num())
-				{
-					break;
-				}
-				for (int h = 0; h < halls[k].Num(); k++)
+				for (int h = 0; h < halls[k].Num(); h++)
 				{
 					if (halls[i][j] == halls[k][h])
 					{
@@ -1148,13 +1145,21 @@ void AGenerator::MergeHallways( TArray<TArray<IntVector>>& halls)
 
 						mergedHallways.Add(mergedHall);
 
+						isMerged = true;
+
 						break;
-					}			
+					}
 				}
+
+
 			}
 		}
-	}
 
+		if (!isMerged)
+		{
+			mergedHallways.Add(halls[i]);
+		}
+	}
 	halls = mergedHallways;
 }
 
@@ -1166,38 +1171,38 @@ void AGenerator::ApplyHallVisuals( TArray<TArray<IntVector>>& halls, const TArra
 	//We need to merge halls that are interconnected to avoid multiple rendering, and it will help with wall placement at junctions.
 	MergeHallways(halls);
 
-	//for (int i = 0; i < halls.Num(); i++)
-	//{
-	//	int32 sectionCounter = 0;
-	//	for (int j = 0; j < halls[i].Num(); j++)
-	//	{
-	//		UProceduralMeshComponent* mesh = Cast<UProceduralMeshComponent>(AddComponentByClass(UProceduralMeshComponent::StaticClass(), false, FTransform(), false));
+	for (int i = 0; i < halls.Num(); i++)
+	{
+		int32 sectionCounter = 0;
+		for (int j = 0; j < halls[i].Num(); j++)
+		{
+			UProceduralMeshComponent* mesh = Cast<UProceduralMeshComponent>(AddComponentByClass(UProceduralMeshComponent::StaticClass(), false, FTransform(), false));
 
-	//		GridNode currentNode = grid[halls[i][j].X][halls[i][j].Y];
+			GridNode currentNode = grid[halls[i][j].X][halls[i][j].Y];
 
-	//		int32 minX = currentNode.nodeCoords.MinX;
-	//		int32 minY = currentNode.nodeCoords.MinY;
-	//		int32 maxX = currentNode.nodeCoords.MaxX;
-	//		int32 maxY = currentNode.nodeCoords.MaxY;
+			int32 minX = currentNode.nodeCoords.MinX;
+			int32 minY = currentNode.nodeCoords.MinY;
+			int32 maxX = currentNode.nodeCoords.MaxX;
+			int32 maxY = currentNode.nodeCoords.MaxY;
 
-	//		TArray<FVector> vertices{ FVector(minX, minY, 0.f),
-	//								  FVector(maxX, minY, 0.f),
-	//								  FVector(maxX, maxY, 0.f),
-	//								  FVector(minX, maxY, 0.f) };
+			TArray<FVector> vertices{ FVector(minX, minY, 0.f),
+									  FVector(maxX, minY, 0.f),
+									  FVector(maxX, maxY, 0.f),
+									  FVector(minX, maxY, 0.f) };
 
-	//		TArray<int32> triangles{ 0, 2, 1,
-	//								0, 3, 2 };
+			TArray<int32> triangles{ 0, 2, 1,
+									0, 3, 2 };
 
-	//		TArray<FVector> normals{ FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f) };
-	//		TArray<FVector2D> UV0{ FVector2D(0, 0), FVector2D(0, 1), FVector2D(1, 1), FVector2D(1, 0) };
-	//		TArray<FProcMeshTangent> tangents{ FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f) };
+			TArray<FVector> normals{ FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f) };
+			TArray<FVector2D> UV0{ FVector2D(0, 0), FVector2D(0, 1), FVector2D(1, 1), FVector2D(1, 0) };
+			TArray<FProcMeshTangent> tangents{ FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f) };
 
-	//		mesh->CreateMeshSection(sectionCounter, vertices, triangles, normals, UV0, TArray<FColor>(), tangents, true);
-	//		mesh->SetMaterial(sectionCounter, m_HallwayMaterial);
+			mesh->CreateMeshSection(sectionCounter, vertices, triangles, normals, UV0, TArray<FColor>(), tangents, true);
+			mesh->SetMaterial(sectionCounter, m_HallwayMaterial);
 
-	//		sectionCounter++;
-	//	}
-	//}
+			sectionCounter++;
+		}
+	}
 }
 
 void AGenerator::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
