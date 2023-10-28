@@ -1163,6 +1163,31 @@ void AGenerator::MergeHallways( TArray<TArray<IntVector>>& halls)
 	halls = mergedHallways;
 }
 
+void AGenerator::MakeHallFloors(const GridNode& node, const int32 sectionCounter)
+{
+	UProceduralMeshComponent* mesh = Cast<UProceduralMeshComponent>(AddComponentByClass(UProceduralMeshComponent::StaticClass(), false, FTransform(), false));
+
+	int32 minX = node.nodeCoords.MinX;
+	int32 minY = node.nodeCoords.MinY;
+	int32 maxX = node.nodeCoords.MaxX;
+	int32 maxY = node.nodeCoords.MaxY;
+
+	TArray<FVector> vertices{ FVector(minX, minY, 0.f),
+							  FVector(maxX, minY, 0.f),
+							  FVector(maxX, maxY, 0.f),
+							  FVector(minX, maxY, 0.f) };
+
+	TArray<int32> triangles{ 0, 2, 1,
+							0, 3, 2 };
+
+	TArray<FVector> normals{ FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f) };
+	TArray<FVector2D> UV0{ FVector2D(0, 0), FVector2D(0, 1), FVector2D(1, 1), FVector2D(1, 0) };
+	TArray<FProcMeshTangent> tangents{ FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f) };
+
+	mesh->CreateMeshSection(sectionCounter, vertices, triangles, normals, UV0, TArray<FColor>(), tangents, true);
+	mesh->SetMaterial(sectionCounter, m_HallwayMaterial);
+}
+
 void AGenerator::ApplyHallVisuals( TArray<TArray<IntVector>>& halls, const TArray<TArray<GridNode>>& grid)
 {
 	//We need to place doors where halls meet rooms
@@ -1176,29 +1201,7 @@ void AGenerator::ApplyHallVisuals( TArray<TArray<IntVector>>& halls, const TArra
 		int32 sectionCounter = 0;
 		for (int j = 0; j < halls[i].Num(); j++)
 		{
-			UProceduralMeshComponent* mesh = Cast<UProceduralMeshComponent>(AddComponentByClass(UProceduralMeshComponent::StaticClass(), false, FTransform(), false));
-
-			GridNode currentNode = grid[halls[i][j].X][halls[i][j].Y];
-
-			int32 minX = currentNode.nodeCoords.MinX;
-			int32 minY = currentNode.nodeCoords.MinY;
-			int32 maxX = currentNode.nodeCoords.MaxX;
-			int32 maxY = currentNode.nodeCoords.MaxY;
-
-			TArray<FVector> vertices{ FVector(minX, minY, 0.f),
-									  FVector(maxX, minY, 0.f),
-									  FVector(maxX, maxY, 0.f),
-									  FVector(minX, maxY, 0.f) };
-
-			TArray<int32> triangles{ 0, 2, 1,
-									0, 3, 2 };
-
-			TArray<FVector> normals{ FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f), FVector(0.f, 0.f, 1.0f) };
-			TArray<FVector2D> UV0{ FVector2D(0, 0), FVector2D(0, 1), FVector2D(1, 1), FVector2D(1, 0) };
-			TArray<FProcMeshTangent> tangents{ FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f) };
-
-			mesh->CreateMeshSection(sectionCounter, vertices, triangles, normals, UV0, TArray<FColor>(), tangents, true);
-			mesh->SetMaterial(sectionCounter, m_HallwayMaterial);
+			MakeHallFloors(grid[halls[i][j].X][halls[i][j].Y], sectionCounter);
 
 			sectionCounter++;
 		}

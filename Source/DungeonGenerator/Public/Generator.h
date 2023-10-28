@@ -74,7 +74,8 @@ private:
 
 	FCoordinates m_PlayAreaCoords;
 	TArray<ARoom*> m_Rooms;
-	TArray<UProceduralMeshComponent*> m_HallMeshes;
+	TArray<UProceduralMeshComponent*> m_HallFloors;
+	TArray<UStaticMeshComponent*> m_HallWalls;
 	
 	
 
@@ -89,6 +90,7 @@ private:
 	void DressRooms();
 	void MakeDoors(const TArray<TArray<IntVector>>&, const TArray<TArray<GridNode>>&);
 	void MergeHallways(TArray<TArray<IntVector>>&);
+	void MakeHallFloors(const GridNode&, const int32);
 	void ApplyHallVisuals(TArray<TArray<IntVector>>&, const TArray<TArray<GridNode>>&);
 
 	TArray<Edge> GetMST(const TArray<Triangle>&);
