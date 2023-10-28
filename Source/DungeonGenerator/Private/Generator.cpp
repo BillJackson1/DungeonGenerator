@@ -72,8 +72,6 @@ void AGenerator::DefinePlayArea()
 	m_PlayAreaCoords.MaxX = m_PlayAreaSizeX * m_GridCellSize;
 	m_PlayAreaCoords.MaxY = m_PlayAreaSizeY * m_GridCellSize;
 
-	UE_LOG(LogTemp, Warning, TEXT("Size x: %d  Size Y: %d"), m_PlayAreaSizeX * m_GridCellSize, m_PlayAreaSizeY * m_GridCellSize);
-
 	FVector center = FVector(m_PlayAreaSizeX / 2, m_PlayAreaSizeY / 2, 0.f);
 
 	DrawSquare(center, center);
@@ -316,8 +314,6 @@ TArray<TArray<GridNode>> AGenerator::MakeGrid()
 	int32 iLoop = m_PlayAreaSizeX / m_GridCellSize;
 	int32 jLoop = m_PlayAreaSizeY / m_GridCellSize;
 
-	UE_LOG(LogTemp, Warning, TEXT("iLoop size: %d  jLoopSize: %d"), iLoop, jLoop);
-
 	for (int32 i = 0; i < iLoop; i++)
 	{
 		grid.Add(TArray<GridNode>());
@@ -397,6 +393,9 @@ TArray<TArray<IntVector>> AGenerator::GenerateHallways(TArray<TArray<GridNode>>&
 {
 	TArray<TArray<IntVector>> hallways;
 	//Cycle through each connections to make halls from one room to another
+
+	UE_LOG(LogTemp, Warning, TEXT("NbConnections: %d"), connections.Num());
+
 	for (Edge e : connections)
 	{
 		FCoordinates start;
@@ -463,6 +462,8 @@ TArray<TArray<IntVector>> AGenerator::GenerateHallways(TArray<TArray<GridNode>>&
 		//	DrawDebugBox(GetWorld(), center, extent, FColor::White, true, -1.f, -2, 25.f);
 		//}
 	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Nb Halls: %d"), hallways.Num());
 	return hallways;
 }
 
@@ -473,7 +474,7 @@ AGenerator::EDirection  AGenerator::GetPathDirection(const TArray<TArray<GridNod
 	FCoordinates endCoords = grid[endIndex.X][endIndex.Y].nodeCoords;
 	FVector dir = FVector(endCoords.MinX, endCoords.MinY, 0.f) - FVector(startCoords.MinX, startCoords.MinY, 0.f);
 	dir.Normalize();
-	//UE_LOG(LogTemp, Warning, TEXT("Dir vector is:  X: %f Y: %f"), dir.X, dir.Y);
+
 	float dotX = (FVector::DotProduct(FVector::ForwardVector, dir));
 	float dotY = (FVector::DotProduct(FVector::RightVector, dir));
 
@@ -724,7 +725,6 @@ IntVector AGenerator::GetPathEndNode(const IntVector& endRoomIndex, const EDirec
 		break;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("Node weight is: %d"), grid[endNodeIndex.X][endNodeIndex.Y].nodeWeight);
 	return endNodeIndex;
 }
 
@@ -1004,8 +1004,6 @@ void AGenerator::DressRooms()
 		room->SetFloorMaterial(m_FloorMaterial);
 		room->SetWalls(*m_WallMesh, m_GridCellSize);
 	}
-
-
 }
 
 void AGenerator::MakeDoors(const TArray<TArray<IntVector>>& halls, const TArray<TArray<GridNode>>& grid)
@@ -1017,8 +1015,6 @@ void AGenerator::MakeDoors(const TArray<TArray<IntVector>>& halls, const TArray<
 		//Find direction opposite to next hallway tile from start tile
 		IntVector current{ halls[i][0] };
 		IntVector next{ halls[i][1] };
-
-		UE_LOG(LogTemp, Warning, TEXT("Current X: %d Y: %d   Next X: %d Y:%d"), current.X, current.Y, next.X, next.Y);
 
 		FVector dir;
 
@@ -1125,10 +1121,11 @@ void AGenerator::MergeHallways( TArray<TArray<IntVector>>& halls)
 {
 	TArray<TArray<IntVector>> mergedHallways{};
 	
+	//In this beautiful set of nested for-loops we look if a tile from a hallway is contained in another hallway and then merge them if true
 	for (int i = 0; i < halls.Num(); i++)
-	{
-		bool isMerged = false;
+	{		
 		TArray<IntVector> mergedHall{};
+		bool isMerged = false;
 		for (int j = 0; j < halls[i].Num(); j++)
 		{
 			for (int k = i + 1; k < halls.Num(); k++)
@@ -1140,33 +1137,34 @@ void AGenerator::MergeHallways( TArray<TArray<IntVector>>& halls)
 						mergedHall.Append(halls[i]);
 						for (IntVector tile : halls[k])
 						{
-							mergedHall.AddUnique(tile);
+							if (!mergedHall.Contains(tile))
+							{
+								mergedHall.Add(tile);
+							}
 						}
 
-						mergedHallways.Add(mergedHall);
+						mergedHallways.AddUnique(mergedHall);
 
 						isMerged = true;
 
 						break;
 					}
 				}
-
-
 			}
 		}
 
 		if (!isMerged)
 		{
-			mergedHallways.Add(halls[i]);
+			mergedHallways.AddUnique(halls[i]);
 		}
 	}
+
+	halls.Empty();
 	halls = mergedHallways;
 }
 
-void AGenerator::MakeHallFloors(const GridNode& node, const int32 sectionCounter)
+void AGenerator::MakeHallFloors(const GridNode& node, UProceduralMeshComponent& mesh, const int32 sectionCounter)
 {
-	UProceduralMeshComponent* mesh = Cast<UProceduralMeshComponent>(AddComponentByClass(UProceduralMeshComponent::StaticClass(), false, FTransform(), false));
-
 	int32 minX = node.nodeCoords.MinX;
 	int32 minY = node.nodeCoords.MinY;
 	int32 maxX = node.nodeCoords.MaxX;
@@ -1184,8 +1182,105 @@ void AGenerator::MakeHallFloors(const GridNode& node, const int32 sectionCounter
 	TArray<FVector2D> UV0{ FVector2D(0, 0), FVector2D(0, 1), FVector2D(1, 1), FVector2D(1, 0) };
 	TArray<FProcMeshTangent> tangents{ FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f), FProcMeshTangent(0.f, 1.f, 0.f) };
 
-	mesh->CreateMeshSection(sectionCounter, vertices, triangles, normals, UV0, TArray<FColor>(), tangents, true);
-	mesh->SetMaterial(sectionCounter, m_HallwayMaterial);
+	mesh.CreateMeshSection(sectionCounter, vertices, triangles, normals, UV0, TArray<FColor>(), tangents, true);
+	mesh.SetMaterial(sectionCounter, m_HallwayMaterial);
+}
+
+void AGenerator::MakeHallWalls(const TArray<TArray<GridNode>>& grid,const TArray<TArray<IntVector>>& halls, const IntVector& tile)
+{
+	//Check Neighboring tiles to determine the number of paths from the current tile
+	TArray<EDirection> wallDirections;
+	FCoordinates current = grid[tile.X][tile.Y].nodeCoords;
+
+	for (int i = -1; i < 2; i++)
+	{
+		//OOB check
+		if (tile.X + i < 0 || tile.X + i >= grid.Num())
+		{
+			continue;
+		}
+
+		//for (int j = -1; j < 2; j++)
+		//{
+		//	//OOB check
+		//	if (tile.Y + j < 0 || tile.Y + j >= grid[i].Num())
+		//	{
+		//		continue;
+		//	}
+
+		//	//Ignore diagonal neighbors
+		//	if (abs(j) == abs(i))
+		//	{
+		//		continue;
+		//	}
+
+		//	//Find which side of tile is a wall
+		//	//if (grid[tile.X + i][tile.Y + j].nodeWeight > 0)
+		//	//{
+		//	//	EDirection toWallDir;			
+		//	//	FCoordinates neighbor = grid[tile.X + i][tile.Y + j].nodeCoords;
+
+		//	//	if (neighbor.MinX > current.MinX)
+		//	//	{
+		//	//		toWallDir = EDirection::NORTH;
+		//	//	}
+		//	//	else if (neighbor.MinX < current.MinX)
+		//	//	{
+		//	//		toWallDir = EDirection::SOUTH;
+		//	//	}
+		//	//	else if (neighbor.MinY > current.MinY)
+		//	//	{
+		//	//		toWallDir = EDirection::EAST;
+		//	//	}
+		//	//	else if (neighbor.MinY < current.MinY)
+		//	//	{
+		//	//		toWallDir = EDirection::WEST;
+		//	//	}
+
+		//	//	wallDirections.Add(toWallDir);
+		//	//}
+
+		//}
+	}
+
+	//for (int i = 0; i < wallDirections.Num(); i++)
+	//{
+	//	switch (wallDirections[i])
+	//	{
+	//	case EDirection::NORTH :
+	//	{
+	//		UStaticMeshComponent* mesh = Cast<UStaticMeshComponent>(AddComponentByClass(UStaticMeshComponent::StaticClass(), true, FTransform(), true));
+
+	//		if (mesh != nullptr)
+	//		{
+	//			mesh->SetStaticMesh(m_WallMesh);
+	//		}
+	//		
+	//		FVector wallCoords{ (float)current.MaxX, (float)current.MaxY, 0.f };
+
+	//		mesh->SetRelativeLocation(wallCoords);
+	//		mesh->SetRelativeRotation(FRotator(0.f, 180.f, 0.f));
+	//	}
+	//	break;
+	//	case EDirection::SOUTH :
+	//	{
+	//		UStaticMeshComponent* mesh = Cast<UStaticMeshComponent>(AddComponentByClass(UStaticMeshComponent::StaticClass(), true, FTransform(), true));
+	//	}
+	//	break;
+	//	case EDirection::EAST :
+	//	{
+	//		UStaticMeshComponent* mesh = Cast<UStaticMeshComponent>(AddComponentByClass(UStaticMeshComponent::StaticClass(), true, FTransform(), true));
+	//	}
+	//	break;
+	//	case EDirection::WEST :
+	//	{
+	//		UStaticMeshComponent* mesh = Cast<UStaticMeshComponent>(AddComponentByClass(UStaticMeshComponent::StaticClass(), true, FTransform(), true));
+	//	}
+	//	break;
+	//	default :
+	//		break;
+	//	}
+	//}
 }
 
 void AGenerator::ApplyHallVisuals( TArray<TArray<IntVector>>& halls, const TArray<TArray<GridNode>>& grid)
@@ -1198,10 +1293,15 @@ void AGenerator::ApplyHallVisuals( TArray<TArray<IntVector>>& halls, const TArra
 
 	for (int i = 0; i < halls.Num(); i++)
 	{
+		UProceduralMeshComponent* mesh = Cast<UProceduralMeshComponent>(AddComponentByClass(UProceduralMeshComponent::StaticClass(), false, FTransform(), false));
 		int32 sectionCounter = 0;
 		for (int j = 0; j < halls[i].Num(); j++)
 		{
-			MakeHallFloors(grid[halls[i][j].X][halls[i][j].Y], sectionCounter);
+			//Generate hallway floors
+			MakeHallFloors(grid[halls[i][j].X][halls[i][j].Y], *mesh, sectionCounter);
+
+			//Generate hallway walls
+			MakeHallWalls(grid,halls, halls[i][j]);
 
 			sectionCounter++;
 		}

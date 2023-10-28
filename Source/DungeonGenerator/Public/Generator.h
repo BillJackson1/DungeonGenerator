@@ -90,7 +90,8 @@ private:
 	void DressRooms();
 	void MakeDoors(const TArray<TArray<IntVector>>&, const TArray<TArray<GridNode>>&);
 	void MergeHallways(TArray<TArray<IntVector>>&);
-	void MakeHallFloors(const GridNode&, const int32);
+	void MakeHallFloors(const GridNode&, UProceduralMeshComponent&, const int32);
+	void MakeHallWalls(const TArray<TArray<GridNode>>&, const TArray<TArray<IntVector>>&, const IntVector&);
 	void ApplyHallVisuals(TArray<TArray<IntVector>>&, const TArray<TArray<GridNode>>&);
 
 	TArray<Edge> GetMST(const TArray<Triangle>&);
